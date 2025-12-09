@@ -1,0 +1,323 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+// TODO: 请将此处的 ******** 替换为你的实际文件路径
+#define FILE_PATH "********"
+#define MAX_NAME 50
+#define MAX_ID 20
+#define MAX_STUDENTS 1000
+
+// 定义学生结构体
+typedef struct {
+    char name[MAX_NAME];
+    char id[MAX_ID];
+    double computer_score;
+    double math_score;
+    double linear_algebra_score;
+} Student;
+
+// 函数声明
+void addStudent();
+void displayAllStudents();
+void calculateAverages();
+void searchStudent();
+void modifyStudent();
+void trimNewline(char *str);
+int loadStudents(Student students[]);
+void saveStudents(Student students[], int count);
+
+int main() {
+    int choice;
+
+    while (1) {
+        printf("\n========== 学生管理系统 ==========\n");
+        printf("1. 录入学生信息\n");
+        printf("2. 显示所有学生信息\n");
+        printf("3. 计算各科平均分\n");
+        printf("4. 查询学生信息\n");
+        printf("5. 修改学生信息\n");
+        printf("0. 退出程序\n");
+        printf("请选择操作 (0-5): ");
+        
+        if (scanf("%d", &choice) != 1) {
+            printf("输入无效，请输入数字。\n");
+            // 清空输入缓冲区
+            while (getchar() != '\n');
+            continue;
+        }
+        getchar(); // 吃掉换行符
+
+        switch (choice) {
+            case 1:
+                addStudent();
+                break;
+            case 2:
+                displayAllStudents();
+                break;
+            case 3:
+                calculateAverages();
+                break;
+            case 4:
+                searchStudent();
+                break;
+            case 5:
+                modifyStudent();
+                break;
+            case 0:
+                printf("感谢使用，再见！\n");
+                exit(0);
+            default:
+                printf("无效选择，请重新输入。\n");
+        }
+    }
+    return 0;
+}
+
+// 录入单个学生信息
+void addStudent() {
+    Student s;
+    FILE *file = fopen(FILE_PATH, "a"); // 以追加模式打开
+    if (file == NULL) {
+        printf("错误：无法打开文件 %s 进行写入！\n", FILE_PATH);
+        return;
+    }
+
+    printf("请输入学生姓名: ");
+    fgets(s.name, MAX_NAME, stdin);
+    trimNewline(s.name);
+
+    printf("请输入学生学号: ");
+    fgets(s.id, MAX_ID, stdin);
+    trimNewline(s.id);
+
+    printf("请输入计算机成绩: ");
+    while (scanf("%lf", &s.computer_score) != 1) {
+        printf("输入无效，请输入数字: ");
+        while (getchar() != '\n');
+    }
+
+    printf("请输入高等数学成绩: ");
+    while (scanf("%lf", &s.math_score) != 1) {
+        printf("输入无效，请输入数字: ");
+        while (getchar() != '\n');
+    }
+
+    printf("请输入线性代数成绩: ");
+    while (scanf("%lf", &s.linear_algebra_score) != 1) {
+        printf("输入无效，请输入数字: ");
+        while (getchar() != '\n');
+    }
+    getchar(); // 吃掉最后的换行符
+
+    // 写入文件
+    fprintf(file, "%s,%s,%.2f,%.2f,%.2f\n", 
+            s.name, s.id, s.computer_score, s.math_score, s.linear_algebra_score);
+    fclose(file);
+
+    printf("学生 %s (学号: %s) 的信息录入成功！\n", s.name, s.id);
+}
+
+// 显示所有学生信息
+void displayAllStudents() {
+    Student students[MAX_STUDENTS];
+    int count = loadStudents(students);
+
+    if (count == 0) {
+        printf("暂无学生数据。\n");
+        return;
+    }
+
+    printf("\n%-15s %-15s %-12s %-12s %-12s\n", "姓名", "学号", "计算机", "高数", "线性代数");
+    printf("------------------------------------------------------------\n");
+    for (int i = 0; i < count; i++) {
+        printf("%-15s %-15s %-12.2f %-12.2f %-12.2f\n", 
+               students[i].name, 
+               students[i].id, 
+               students[i].computer_score, 
+               students[i].math_score, 
+               students[i].linear_algebra_score);
+    }
+}
+
+// 计算并输出各科平均分
+void calculateAverages() {
+    Student students[MAX_STUDENTS];
+    int count = loadStudents(students);
+
+    if (count == 0) {
+        printf("暂无数据可计算平均分。\n");
+        return;
+    }
+
+    double total_computer = 0.0, total_math = 0.0, total_linear = 0.0;
+
+    for (int i = 0; i < count; i++) {
+        total_computer += students[i].computer_score;
+        total_math += students[i].math_score;
+        total_linear += students[i].linear_algebra_score;
+    }
+
+    printf("\n========== 各科平均分 ==========\n");
+    printf("计算机平均分: %.2f\n", total_computer / count);
+    printf("高等数学平均分: %.2f\n", total_math / count);
+    printf("线性代数平均分: %.2f\n", total_linear / count);
+}
+
+// 查询学生信息
+void searchStudent() {
+    Student students[MAX_STUDENTS];
+    int count = loadStudents(students);
+    if (count == 0) {
+        printf("暂无学生数据。\n");
+        return;
+    }
+
+    int choice;
+    char keyword[MAX_NAME];
+
+    printf("按什么查询？\n1. 姓名\n2. 学号\n请选择 (1-2): ");
+    scanf("%d", &choice);
+    getchar();
+
+    if (choice != 1 && choice != 2) {
+        printf("无效选择。\n");
+        return;
+    }
+
+    printf("请输入 %s: ", (choice == 1) ? "姓名" : "学号");
+    fgets(keyword, (choice == 1) ? MAX_NAME : MAX_ID, stdin);
+    trimNewline(keyword);
+
+    int found = 0;
+    printf("\n%-15s %-15s %-12s %-12s %-12s\n", "姓名", "学号", "计算机", "高数", "线性代数");
+    printf("------------------------------------------------------------\n");
+    
+    for (int i = 0; i < count; i++) {
+        if ((choice == 1 && strcasecmp(students[i].name, keyword) == 0) || 
+            (choice == 2 && strcmp(students[i].id, keyword) == 0)) {
+            printf("%-15s %-15s %-12.2f %-12.2f %-12.2f\n", 
+                   students[i].name, students[i].id, 
+                   students[i].computer_score, students[i].math_score, 
+                   students[i].linear_algebra_score);
+            found = 1;
+        }
+    }
+
+    if (!found) {
+        printf("未找到匹配的学生信息。\n");
+    }
+}
+
+// 修改学生信息
+void modifyStudent() {
+    Student students[MAX_STUDENTS];
+    int count = loadStudents(students);
+    if (count == 0) {
+        printf("暂无学生数据可修改。\n");
+        return;
+    }
+
+    int choice;
+    char keyword[MAX_NAME];
+    int targetIndex = -1;
+
+    printf("按什么修改？\n1. 姓名\n2. 学号\n请选择 (1-2): ");
+    scanf("%d", &choice);
+    getchar();
+
+    if (choice != 1 && choice != 2) {
+        printf("无效选择。\n");
+        return;
+    }
+
+    printf("请输入 %s: ", (choice == 1) ? "姓名" : "学号");
+    fgets(keyword, (choice == 1) ? MAX_NAME : MAX_ID, stdin);
+    trimNewline(keyword);
+
+    // 查找目标学生
+    for (int i = 0; i < count; i++) {
+        if ((choice == 1 && strcasecmp(students[i].name, keyword) == 0) || 
+            (choice == 2 && strcmp(students[i].id, keyword) == 0)) {
+            targetIndex = i;
+            break;
+        }
+    }
+
+    if (targetIndex == -1) {
+        printf("未找到该学生，无法修改。\n");
+        return;
+    }
+
+    // 找到了，开始修改
+    printf("当前信息 -> 姓名: %s, 学号: %s\n", students[targetIndex].name, students[targetIndex].id);
+    printf("计算机: %.2f, 高数: %.2f, 线性代数: %.2f\n", 
+           students[targetIndex].computer_score, students[targetIndex].math_score, 
+           students[targetIndex].linear_algebra_score);
+
+    printf("\n请输入新的计算机成绩 (原:%.2f): ", students[targetIndex].computer_score);
+    scanf("%lf", &students[targetIndex].computer_score);
+
+    printf("请输入新的高等数学成绩 (原:%.2f): ", students[targetIndex].math_score);
+    scanf("%lf", &students[targetIndex].math_score);
+
+    printf("请输入新的线性代数成绩 (原:%.2f): ", students[targetIndex].linear_algebra_score);
+    scanf("%lf", &students[targetIndex].linear_algebra_score);
+    getchar(); // 吃掉换行
+
+    // 重新保存所有数据
+    saveStudents(students, count);
+    printf("学生信息修改成功！\n");
+}
+
+// 辅助函数：去除字符串末尾的换行符
+void trimNewline(char *str) {
+    int len = strlen(str);
+    if (len > 0 && str[len - 1] == '\n') {
+        str[len - 1] = '\0';
+    }
+}
+
+// 辅助函数：从文件加载所有学生数据到数组
+int loadStudents(Student students[]) {
+    FILE *file = fopen(FILE_PATH, "r");
+    int count = 0;
+
+    if (file == NULL) {
+        // 如果文件不存在，返回0
+        return 0;
+    }
+
+    // 格式: name,id,comp_score,math_score,linear_score
+    while (fscanf(file, "%49[^,],%19[^,],%lf,%lf,%lf\n", 
+                  students[count].name, 
+                  students[count].id, 
+                  &students[count].computer_score, 
+                  &students[count].math_score, 
+                  &students[count].linear_algebra_score) == 5) {
+        count++;
+        if (count >= MAX_STUDENTS) break; // 防止数组越界
+    }
+
+    fclose(file);
+    return count;
+}
+
+// 辅助函数：将数组中的所有学生数据保存回文件
+void saveStudents(Student students[], int count) {
+    FILE *file = fopen(FILE_PATH, "w"); // 以写入模式打开（会清空原文件）
+    if (file == NULL) {
+        printf("错误：无法打开文件 %s 进行写入！\n", FILE_PATH);
+        return;
+    }
+
+    for (int i = 0; i < count; i++) {
+        fprintf(file, "%s,%s,%.2f,%.2f,%.2f\n", 
+                students[i].name, students[i].id, 
+                students[i].computer_score, students[i].math_score, 
+                students[i].linear_algebra_score);
+    }
+
+    fclose(file);
+}
