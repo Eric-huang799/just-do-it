@@ -1,0 +1,280 @@
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ==========================================================
+        // 1. 配置数据: 方块与工具
+        // ==========================================================
+        const BLOCKS = {
+            AIR: { id: 0, name: "空气", color: 0x000000, alpha: 0 },
+            DIRT: { id: 1, name: "泥土", color: 0x8B4513, alpha: 1 },
+            GRASS: { id: 2, name: "草方块", color: 0x3EBD2F, alpha: 1 },
+            STONE: { id: 3, name: "石头", color: 0xAAAAAA, alpha: 1 },
+            LOG: { id: 4, name: "原木", color: 0x8B5A2B, alpha: 1 },
+            LEAF: { id: 5, name: "树叶", color: 0x228B22, alpha: 0.5 },
+            SAND: { id: 6, name: "沙子", color: 0xF4A460, alpha: 1 },
+            IRON: { id: 7, name: "铁块", color: 0xD3D3D3, alpha: 1 },
+            GLASS: { id: 8, name: "玻璃", color: 0xFFFFFF, alpha: 0.3 },
+            PLANK: { id: 9, name: "木板", color: 0xDEB887, alpha: 1 },
+        };
+
+        const TOOLS = {
+            hand: { name: "手", speed: 1 },
+            woodPick: { name: "木镐", speed: 1.5 },
+            stonePick: { name: "石镐", speed: 2 },
+            ironPick: { name: "铁镐", speed: 3 }
+        };
+
+        // ==========================================================
+        // 2. 核心类: 世界 (World)
+        // ==========================================================
+        class World {
+            constructor(width = 50, depth = 50, height = 40) {
+                this.width = width; this.depth = depth; this.height = height;
+                this.size = width * height * depth;
+                this.data = new Uint8Array(this.size);
+                this.materials = this.createMaterials();
+                this.mesh = null;
+            }
+
+            createMaterials() {
+                const mats = {};
+                Object.values(BLOCKS).forEach(b => {
+                    mats[b.id] = new THREE.MeshLambertMaterial({ 
+                        color: b.color, 
+                        transparent: b.alpha < 1,
+                        opacity: b.alpha,
+                        depthWrite: b.alpha >= 1
+                    });
+                });
+                return mats;
+            }
+
+            // 生成地形：表层2格泥土，下面是石头，少量铁
+            generate() {
+                for (let x = 0; x < this.width; x++) {
+                    for (let z = 0; z < this.depth; z++) {
+                        const height = 20 + Math.floor(Math.random() * 5);
+                        
+                        // 表层2格泥土 + 1格草
+                        this.set(x, height+1, z, BLOCKS.GRASS.id);
+                        this.set(x, height, z, BLOCKS.DIRT.id);
+                        this.set(x, height-1, z, BLOCKS.DIRT.id);
+
+                        // 基岩 (底部)
+                        for (let y = 0; y < 5; y++) this.set(x, y, z, BLOCKS.STONE.id);
+
+                        // 中间层 (石头为主，少量铁)
+                        for (let y = 5; y < height - 1; y++) {
+                            this.set(x, y, z, Math.random() < 0.008 ? BLOCKS.IRON.id : BLOCKS.STONE.id);
+                        }
+                    }
+                }
+                this.build();
+            }
+
+            get(x, y, z) {
+                if (y < 0 || y >= this.height) return BLOCKS.STONE.id;
+                return this.data[x + y * this.width + z * this.width * this.height] || BLOCKS.AIR.id;
+            }
+
+            set(x, y, z, id) {
+                if (y >= 0 && y < this.height) {
+                    this.data[x + y * this.width + z * this.width * this.height] = id;
+                }
+            }
+
+            // 合并几何体渲染 (高性能关键)
+            build() {
+                const geo = new THREE.BufferGeometry();
+                const vertices = [];
+                const colors = [];
+
+                // 简单的面数据 (一个立方体)
+                const cube = [
+                    // 前, 后, 右, 左, 上, 下 (6个面)
+                    , // 前
+                    , // 后
+                    , // 右
+                    , // 左
+                    , // 上
+                      // 下
+                ];
+
+                for (let x = 0; x < this.width; x++) {
+                    for (let z = 0; z < this.depth; z++) {
+                        for (let y = 0; y < this.height; y++) {
+                            const id = this.get(x, y, z);
+                            if (id === BLOCKS.AIR.id) continue;
+                            const color = BLOCKS[Object.keys(BLOCKS)[id]]?.color || 0xffffff;
+
+                            // 添加顶点
+                            cube.forEach(face => {
+                                for (let i = 0; i < 4; i++) {
+                                    const [dx, dy, dz] = [face[i*3], face[i*3+1], face[i*3+2]];
+                                    vertices.push(x+dx, y+dy, z+dz);
+                                    colors.push((color>>16)&255, (color>>8)&255, color&255);
+                                }
+                            });
+                        }
+                    }
+                }
+
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+                geo.setAttribute('color', new THREE.Uint8BufferAttribute(colors, 3, true));
+                geo.computeVertexNormals();
+
+                if (this.mesh) scene.remove(this.mesh);
+                this.mesh = new THREE.Mesh(geo, Object.values(this.materials));
+                scene.add(this.mesh);
+            }
+        }
+
+        // ==========================================================
+        // 3. 初始化与主循环
+        // ==========================================================
+        let world, scene, camera, renderer;
+        let currentBlock = BLOCKS.GRASS.id; // 默认放置草方块
+
+        init();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.Fog(0x87CEEB, 20, 100);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+            camera.position.set(25, 30, 25);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // 光照
+            scene.add(new THREE.AmbientLight(0x666666));
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(10, 20, 10);
+            scene.add(light);
+
+            // 创建世界
+            world = new World();
+            world.generate();
+
+            // 控制器
+            const controls = new (function() {
+                let move = { forward: false, backward: false, left: false, right: false };
+                let velocity = new THREE.Vector3();
+                let direction = new THREE.Vector3();
+                let isOnGround = true;
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.code === 'KeyW') move.forward = true;
+                    if (e.code === 'KeyS') move.backward = true;
+                    if (e.code === 'KeyA') move.left = true;
+                    if (e.code === 'KeyD') move.right = true;
+                    if (e.code === 'Space' && isOnGround) {
+                        velocity.y = 0.5; // 跳跃力
+                        isOnGround = false;
+                    }
+                });
+                document.addEventListener('keyup', (e) => {
+                    if (e.code === 'KeyW') move.forward = false;
+                    if (e.code === 'KeyS') move.backward = false;
+                    if (e.code === 'KeyA') move.left = false;
+                    if (e.code === 'KeyD') move.right = false;
+                });
+
+                this.update = () => {
+                    // 重力
+                    if (!isOnGround) velocity.y += -0.05;
+                    
+                    // 移动
+                    if (move.forward) camera.translateZ(-0.1);
+                    if (move.backward) camera.translateZ(0.1);
+                    if (move.left) camera.translateX(-0.1);
+                    if (move.right) camera.translateX(0.1);
+
+                    // 碰撞检测 (简易)
+                    const playerY = Math.floor(camera.position.y - 1.8);
+                    if (world.get(Math.floor(camera.position.x), playerY, Math.floor(camera.position.z)) !== BLOCKS.AIR.id) {
+                        camera.position.y += 1;
+                        velocity.y = 0;
+                        isOnGround = true;
+                    }
+                    if (camera.position.y < 5) {
+                        camera.position.y = 5;
+                        velocity.y = 0;
+                        isOnGround = true;
+                    }
+                };
+            })();
+
+            // 交互逻辑
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+
+            renderer.domElement.addEventListener('click', (event) => {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObject(world.mesh);
+                
+                if (intersects.length > 0) {
+                    const point = intersects.point;
+                    const face = intersects.face;
+                    
+                    // 计算点击的方块坐标
+                    let x = Math.floor(point.x);
+                    let y = Math.floor(point.y);
+                    let z = Math.floor(point.z);
+
+                    if (event.button === 0) { // 左键: 挖掘
+                        world.set(x, y, z, BLOCKS.AIR.id);
+                        world.build();
+                    } else if (event.button === 2) { // 右键: 放置
+                        // 计算放置位置 (在点击面的外侧)
+                        x += face.normal.x;
+                        y += face.normal.y;
+                        z += face.normal.z;
+                        world.set(Math.floor(x), Math.floor(y), Math.floor(z), currentBlock);
+                        world.build();
+                    }
+                }
+            });
+
+            // 全屏
+document.addEventListener('keydown', (e) => { if (e.key === 'f' || e.key === 'F') renderer.domElement.requestFullscreen(); });
+
+            // 数字键切换方块
+            document.addEventListener('keydown', (e) => {
+                const blocks = [BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.LOG, BLOCKS.SAND];
+                if (!isNaN(e.key) && blocks[e.key - 1]) {
+                    currentBlock = blocks[e.key - 1].id;
+                    document.getElementById("blockInfo").textContent = blocks[e.key - 1].name;
+                }
+            });
+            // 鼠标锁定
+            renderer.domElement.addEventListener('click', () => { renderer.domElement.requestPointerLock(); });
+            document.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement === renderer.domElement) {
+                    camera.rotation.y -= e.movementX * 0.002;
+                    camera.rotation.x -= e.movementY * 0.002;
+                    camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+                }
+            });
+
+            // 动画循环
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        // 窗口自适应
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
