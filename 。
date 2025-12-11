@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>极简沙盒世界</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        canvas { display: block; }
+        #ui {
+            position: absolute; top: 10px; left: 10px;
+            color: white; font: bold 14px sans-serif;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+            z-index: 100;
+        }
+        #crosshair { 
+            position: absolute; top: 50%; left: 50%; 
+            width: 20px; height: 20px; margin: -10px 0 0 -10px; 
+            color: white; font-size: 20px; text-align: center; 
+            pointer-events: none; 
+        }
+        .btn { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); 
+               padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div>方块: <span id="blockInfo">草方块</span></div>
+        <div>提示: WASD移动 空格跳 左键挖 右键放 [F键全屏]</div>
+    </div>
+    <div id="crosshair">+</div>
+    <button class="btn" onclick="window.location.reload();">🔄 重新生成地图</button>
+
+    <!-- Three.js 库加载 -->
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js"
+      }
+    }
+    </script>
